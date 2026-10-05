@@ -15,6 +15,7 @@ The application allows linguists and NLP researchers to execute pattern queries 
   - [2. OCaml & Grew Backend Installation](#2-ocaml--grew-backend-installation)
   - [3. Python Environment & Dependencies](#3-python-environment--dependencies)
   - [4. Corpus Data Placement](#4-corpus-data-placement)
+- [Corpus Ingestion & XML Extraction (`extract.py`)](#-corpus-ingestion--xml-extraction-extractpy)
 - [Running Locally](#-running-locally)
   - [Streamlit Web Application](#streamlit-web-application)
   - [Command-Line Interface (CLI)](#command-line-interface-cli)
@@ -69,9 +70,10 @@ The application is structured into a modular multi-tier architecture:
 
 - **Frontend / Presentation Layer:**
   - **Streamlit** (v1.40+): Web interface providing search configuration, live progress bars, summary KPI metric cards, dataframes, distribution charts (Altair / Streamlit charts), and JSON/CSV export buttons.
-- **Engine Layer:**
+- **Engine & Processing Layer:**
   - `engine.py`: Core querying module providing unified whole-dataset querying, chunk-by-chunk iteration with memory cleanup, token attribute extraction, and sentence reconstruction.
   - `search_cli.py`: Production-ready CLI interface with tabular summaries, formatted text outputs, and structured JSON export.
+  - `extract.py`: High-throughput, streaming XML-to-CoNLL-U parser and corpus conversion utility.
 - **Linguistic Graph Matching Engine:**
   - `grewpy`: Official Python client for Grew.
   - `grewpy_backend`: Native compiled OCaml binary executing graph matching algorithms with high efficiency.
@@ -204,6 +206,66 @@ data/
 ```
 
 The application recursively scans and indexes all `.conllu` files automatically on launch.
+
+---
+
+## 📦 Corpus Ingestion & XML Extraction (`extract.py`)
+
+If your raw corpus source is in XML format (e.g., Korp / Språkbanken XML exports), the repository includes `extract.py` to parse and convert XML treebanks directly into standard CoNLL-U format.
+
+### How It Works
+
+- **Streaming XML Parsing (`iterparse`):** Processes documents incrementally element-by-element, maintaining minimal memory overhead even for large multi-gigabyte XML files.
+- **1-to-1 File Mapping (Default):** Converts each source XML file (e.g., `da_000010.xml`) directly into a matching `.conllu` file (e.g., `data/da_000010.conllu`) without unnecessary sub-chunking.
+- **Syntactic & Morphological Field Mapping:**
+  - Token reference ID $\to$ CoNLL-U `ID`
+  - Word text $\to$ `FORM`
+  - Base lemma $\to$ `LEMMA`
+  - Part of Speech (`pos`) $\to$ `XPOS`
+  - Universal / Morphological features (`ufeats`) $\to$ `FEATS`
+  - Dependency head (`dephead`) $\to$ `HEAD`
+  - Dependency relation (`deprel`) $\to$ `DEPREL`
+
+### Command-Line Arguments
+
+```text
+usage: extract.py [-h] [--output_dir OUTPUT_DIR] [--split SPLIT]
+                  [--max_files MAX_FILES] [--archive ARCHIVE]
+                  xml_files [xml_files ...]
+
+Positional Arguments:
+  xml_files              One or more XML file paths (globs supported).
+
+Options:
+  --output_dir DIR       Destination folder for .conllu files (default: 'data').
+  --split N              Optional: Split each XML into chunks of N sentences (e.g. 1000).
+  --max_files M          Optional: Safety limit for maximum number of split chunks per XML.
+  --archive TAR_NAME     Optional: Package generated .conllu files into a .tar.gz archive.
+```
+
+### Examples
+
+#### 1. Convert a single XML file to `data/`:
+```bash
+python extract.py xml/da_000010.xml --output_dir data
+```
+*(Produces `data/da_000010.conllu`)*
+
+#### 2. Batch-convert an entire folder of XML files:
+```bash
+python extract.py xml/*.xml --output_dir data
+```
+
+#### 3. Sub-chunk a massive XML into smaller partitions (e.g., 2,000 sentences per chunk):
+```bash
+python extract.py xml/large_corpus.xml --output_dir data --split 2000
+```
+*(Produces `data/large_corpus_0001.conllu`, `data/large_corpus_0002.conllu`, etc.)*
+
+#### 4. Convert and create a compressed `.tar.gz` archive for deployment:
+```bash
+python extract.py xml/*.xml --output_dir data --archive corpus_data.tar.gz
+```
 
 ---
 
@@ -660,9 +722,11 @@ grew_frontend/
 ├── app.py              # Streamlit Web Application (UI, visualization, exports)
 ├── engine.py           # Core search engine & memory-safe iteration logic
 ├── search_cli.py       # Standalone Command-Line Interface (CLI)
+├── extract.py          # XML to CoNLL-U streaming converter & extraction tool
 ├── test_engine.py      # Automated unit and integration test suite
 ├── requirements.txt    # Python package dependencies
 ├── README.md           # Technical documentation and deployment guide
+├── xml/                # Raw source XML corpora directory
 └── data/               # CoNLL-U (.conllu) corpus treebank directory (git-ignored)
 ```
 
