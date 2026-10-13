@@ -28,10 +28,14 @@ def init_backend():
         pass
 
 
-def discover_corpus_files(data_dir: str = "data") -> List[str]:
+def discover_corpus_files(data_dir: str = "data", subfolder: Optional[str] = None) -> List[str]:
     """Find all .conllu files in the given directory or project, sorted naturally."""
+    target_dir = os.path.join(data_dir, subfolder) if subfolder else data_dir
     candidates = []
-    if os.path.isdir(data_dir):
+    if os.path.isdir(target_dir):
+        candidates.extend(glob.glob(f"{target_dir}/*.conllu"))
+        candidates.extend(glob.glob(f"{target_dir}/**/*.conllu", recursive=True))
+    elif os.path.isdir(data_dir):
         candidates.extend(glob.glob(f"{data_dir}/*.conllu"))
         candidates.extend(glob.glob(f"{data_dir}/**/*.conllu", recursive=True))
     else:
@@ -45,6 +49,33 @@ def discover_corpus_files(data_dir: str = "data") -> List[str]:
 
     sorted_files = sorted(list(unique_map.values()))
     return sorted_files
+
+
+def group_corpus_files_by_folder(data_dir: str = "data") -> Dict[str, List[str]]:
+    """
+    Group all discovered .conllu files by their immediate subfolder relative to data_dir.
+    Files directly inside data_dir are grouped under '(Root / Loose Files)'.
+    Returns an ordered mapping: {folder_name: [file_paths]}.
+    """
+    files = discover_corpus_files(data_dir)
+    grouped: Dict[str, List[str]] = {}
+    base_path = Path(data_dir).resolve() if os.path.isdir(data_dir) else Path(".").resolve()
+
+    for f in files:
+        f_path = Path(f).resolve()
+        try:
+            rel = f_path.relative_to(base_path)
+            if rel.parent == Path("."):
+                folder_key = "(Root / Loose Files)"
+            else:
+                folder_key = rel.parts[0]
+        except Exception:
+            folder_key = Path(f).parent.name or "(Root / Loose Files)"
+
+        grouped.setdefault(folder_key, []).append(f)
+
+    sorted_grouped = {k: grouped[k] for k in sorted(grouped.keys())}
+    return sorted_grouped
 
 
 def get_corpus_chunk_map(data_dir: str = "data") -> Dict[str, str]:

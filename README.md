@@ -269,6 +269,34 @@ python extract.py xml/*.xml --output_dir data --archive corpus_data.tar.gz
 
 ---
 
+## 🗂 Organizing Loose Files (`organize_data.py`)
+
+If you have loose `.conllu` chunks stored directly inside the `data/` directory (e.g. `svt-2022_0001.conllu`, `svt-2022_0002.conllu`), you can use `organize_data.py` to automatically group them into clean subfolders.
+
+### Features
+- **Auto Prefix Detection:** Identifies corpus prefixes (e.g. `svt-2022_0001.conllu` $\to$ `data/svt-2022/`).
+- **Dry-Run Simulation:** Test and preview proposed file reorganizations without modifying disk state.
+- **Copy or Move:** Move files by default or copy them with `--copy`.
+
+### Usage & Examples
+
+#### 1. Preview planned reorganization (Safe Dry-Run):
+```bash
+python organize_data.py --dry-run
+```
+
+#### 2. Organize all loose files in `data/`:
+```bash
+python organize_data.py
+```
+
+#### 3. Organize with verbose file-by-file output:
+```bash
+python organize_data.py -v
+```
+
+---
+
 ## 💻 Running Locally
 
 ### Streamlit Web Application
@@ -564,11 +592,12 @@ Certbot will automatically update the Nginx configuration to enforce HTTPS and s
 
 ### Streamlit Web Interface
 
-1. **Select Search Scope in the Sidebar:**
-   - **🌐 All Subcorpora (Unified Dataset):** Executes the query across all files as one cohesive corpus.
-   - **🔄 Iterate Subcorpora (Per-Chunk Breakdown):** Iterates chunk by chunk, recording match counts, frequencies per 1,000 sentences, and distribution charts.
+1. **Select Subcorpus Folder & Scope in the Sidebar:**
+   - **📂 Subcorpus Folder / Group:** Filter by specific corpus directory under `data/` (e.g. `svt-2022`, `news`, `historical`) or select `🌐 All Subcorpora Folders`.
+   - **🌐 All Subcorpora (In Selected Scope):** Executes the query across all files in the scope as one cohesive corpus.
+   - **🔄 Iterate Subcorpora (Per-Chunk Breakdown):** Iterates chunk by chunk through the selected folder, recording match counts, frequencies per 1,000 sentences, and distribution charts.
    - **🎯 Single Subcorpus Chunk:** Focus on an individual `.conllu` file for fast micro-analysis.
-   - **📑 Custom Subset / Range:** Select the first $N$ chunks or pick specific chunks manually.
+   - **📑 Custom Subset / Range:** Select the first $N$ chunks or pick specific chunks manually from the selected folder.
 2. **Choose or Enter a Grew Query:**
    - Select a pre-built template from the dropdown (Swedish Talbanken/MAMBA or Universal Dependencies).
    - Or write a custom GRS pattern directly in the query editor.
@@ -588,14 +617,15 @@ Certbot will automatically update the Nginx configuration to enforce HTTPS and s
 #### Basic Usage & Options
 
 ```text
-usage: search_cli.py [-h] [-q QUERY] [-f FILE] [-d DATA_DIR] [-n CHUNKS_LIMIT]
-                     [--all] [--count-only] [-m MAX_MATCHES]
+usage: search_cli.py [-h] [-q QUERY] [-f FILE] [-d DATA_DIR] [-s SUBFOLDER]
+                     [-n CHUNKS_LIMIT] [--all] [--count-only] [-m MAX_MATCHES]
                      [--format {text,json,summary}] [-o OUTPUT]
 
 Options:
   -q, --query TEXT         Grew pattern query.
   -f, --file PATH          Path to a single .conllu file.
   -d, --data-dir DIR       Directory containing .conllu files (default: 'data').
+  -s, --subfolder FOLDER   Filter search to a specific subfolder/group in data directory.
   -n, --chunks-limit N     Limit number of subcorpus chunks.
   --all                    Search across all subcorpora.
   --count-only             Output match counts only without building full trees.
@@ -723,6 +753,7 @@ grew_frontend/
 ├── engine.py           # Core search engine & memory-safe iteration logic
 ├── search_cli.py       # Standalone Command-Line Interface (CLI)
 ├── extract.py          # XML to CoNLL-U streaming converter & extraction tool
+├── organize_data.py    # Auto-organizer for loose corpus files into subfolders
 ├── test_engine.py      # Automated unit and integration test suite
 ├── requirements.txt    # Python package dependencies
 ├── README.md           # Technical documentation and deployment guide

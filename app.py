@@ -21,6 +21,7 @@ if os.path.isdir(opam_bin) and opam_bin not in os.environ.get("PATH", "").split(
 from engine import (
     init_backend,
     discover_corpus_files,
+    group_corpus_files_by_folder,
     get_corpus_chunk_map,
     search_single_corpus,
     iterate_corpora_search,
@@ -46,11 +47,10 @@ setup_grew()
 st.title("🔍 Grew Dependency Corpus Search Engine")
 st.caption("Query dependency treebanks individually, iterate chunk-by-chunk with statistics, or search across the entire unified dataset.")
 
-# Discover available corpus files
+# Discover available corpus files & folders
+folder_map = group_corpus_files_by_folder("data")
 all_corpus_files = discover_corpus_files("data")
 total_corpus_files = len(all_corpus_files)
-corpus_map = {Path(f).stem: f for f in all_corpus_files}
-corpus_names = list(corpus_map.keys())
 
 # --- 1. SIDEBAR: Corpus Scope Configuration ---
 st.sidebar.header("📁 Corpus Scope & Selection")
@@ -59,12 +59,28 @@ if not all_corpus_files:
     st.sidebar.error("No .conllu files found in data/ directory!")
     st.stop()
 
-st.sidebar.info(f"Available in dataset: **{total_corpus_files} subcorpus chunks**")
+# Subfolder / Group filter
+folder_keys = list(folder_map.keys())
+folder_options = ["🌐 All Subcorpora Folders"] + folder_keys
+selected_folder = st.sidebar.selectbox("📂 Subcorpus Folder / Group:", folder_options, index=0)
+
+if selected_folder == "🌐 All Subcorpora Folders":
+    scoped_corpus_files = all_corpus_files
+    folder_desc = "all folders"
+else:
+    scoped_corpus_files = folder_map.get(selected_folder, [])
+    folder_desc = f"group '{selected_folder}'"
+
+scoped_total = len(scoped_corpus_files)
+scoped_corpus_map = {Path(f).stem: f for f in scoped_corpus_files}
+scoped_corpus_names = list(scoped_corpus_map.keys())
+
+st.sidebar.info(f"Available in {folder_desc}: **{scoped_total} subcorpus chunks**")
 
 search_mode = st.sidebar.radio(
     "Search Mode:",
     [
-        "🌐 All Subcorpora (Unified Dataset)",
+        "🌐 All Subcorpora (In Selected Scope)",
         "🔄 Iterate Subcorpora (Per-Chunk Breakdown)",
         "🎯 Single Subcorpus Chunk",
         "📑 Custom Subset / Range"
@@ -75,29 +91,29 @@ search_mode = st.sidebar.radio(
 target_files = []
 
 if search_mode == "🎯 Single Subcorpus Chunk":
-    selected_chunk = st.sidebar.selectbox("Select Subcorpus Chunk:", corpus_names)
-    target_files = [corpus_map[selected_chunk]]
+    selected_chunk = st.sidebar.selectbox("Select Subcorpus Chunk:", scoped_corpus_names)
+    target_files = [scoped_corpus_map[selected_chunk]] if selected_chunk else []
 
 elif search_mode == "📑 Custom Subset / Range":
     subset_type = st.sidebar.radio("Selection Method:", ["First N Chunks", "Manual Multi-Select"])
     if subset_type == "First N Chunks":
-        max_n = min(50, total_corpus_files) if total_corpus_files > 50 else total_corpus_files
-        n_chunks = st.sidebar.slider("Number of Chunks:", min_value=1, max_value=total_corpus_files, value=min(10, total_corpus_files))
-        target_files = all_corpus_files[:n_chunks]
+        n_chunks = st.sidebar.slider("Number of Chunks:", min_value=1, max_value=scoped_total, value=min(10, scoped_total))
+        target_files = scoped_corpus_files[:n_chunks]
     else:
-        selected_multi = st.sidebar.multiselect("Choose Chunks:", corpus_names, default=corpus_names[:3] if len(corpus_names) >= 3 else corpus_names)
-        target_files = [corpus_map[name] for name in selected_multi]
+        default_sel = scoped_corpus_names[:3] if len(scoped_corpus_names) >= 3 else scoped_corpus_names
+        selected_multi = st.sidebar.multiselect("Choose Chunks:", scoped_corpus_names, default=default_sel)
+        target_files = [scoped_corpus_map[name] for name in selected_multi]
 
 elif search_mode == "🔄 Iterate Subcorpora (Per-Chunk Breakdown)":
     limit_chunks = st.sidebar.checkbox("Limit number of chunks to iterate", value=False)
     if limit_chunks:
-        n_chunks = st.sidebar.slider("Chunks to iterate:", min_value=1, max_value=total_corpus_files, value=min(20, total_corpus_files))
-        target_files = all_corpus_files[:n_chunks]
+        n_chunks = st.sidebar.slider("Chunks to iterate:", min_value=1, max_value=scoped_total, value=min(20, scoped_total))
+        target_files = scoped_corpus_files[:n_chunks]
     else:
-        target_files = all_corpus_files
+        target_files = scoped_corpus_files
 
-elif search_mode == "🌐 All Subcorpora (Unified Dataset)":
-    target_files = all_corpus_files
+elif search_mode.startswith("🌐 All Subcorpora"):
+    target_files = scoped_corpus_files
 
 st.sidebar.markdown(f"**Target Files Selected:** {len(target_files)}")
 

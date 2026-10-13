@@ -42,6 +42,12 @@ def main():
         help="Directory containing .conllu files (default: 'data')."
     )
     parser.add_argument(
+        "-s", "--subfolder",
+        type=str,
+        default=None,
+        help="Filter search to a specific subfolder/group within data directory."
+    )
+    parser.add_argument(
         "-n", "--chunks-limit",
         type=int,
         default=None,
@@ -82,9 +88,10 @@ def main():
     if args.file:
         files = [args.file]
     else:
-        files = discover_corpus_files(args.data_dir)
+        files = discover_corpus_files(args.data_dir, subfolder=args.subfolder)
         if not files:
-            print(f"Error: No .conllu files found in directory '{args.data_dir}'.", file=sys.stderr)
+            target_desc = f"subfolder '{args.subfolder}' in directory '{args.data_dir}'" if args.subfolder else f"directory '{args.data_dir}'"
+            print(f"Error: No .conllu files found in {target_desc}.", file=sys.stderr)
             sys.exit(1)
         if args.chunks_limit:
             files = files[:args.chunks_limit]
