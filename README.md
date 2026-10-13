@@ -770,4 +770,4 @@ grew_frontend/
 
 ## 📄 License
 
-This project is licensed under the MIT License. Grew and grewpy are developed and maintained by the [Grew Research Team](https://grew.fr).
+This project is licensed under the MIT License. Grew and grewpy are developed and maintained by [CDHU](https://www.uu.se/en/centre/digital-humanities-and-social-sciences/about-us).
