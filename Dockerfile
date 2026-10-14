@@ -23,9 +23,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_HEADLESS=true \
     PATH="/usr/local/bin:$PATH"
 
-# Install runtime system dependencies (libgmp required by OCaml binary, curl for healthchecks)
+# Install runtime system dependencies (libgmp, libfontconfig1, libcairo2 required by OCaml binary, curl for healthchecks)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgmp10 \
+    libfontconfig1 \
+    libcairo2 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
