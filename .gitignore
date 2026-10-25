@@ -19,3 +19,4 @@ htmlcov/
 *.zip
 grew_search_matches.json
 subcorpus_match_stats.csv
+users.json

@@ -13,6 +13,15 @@ import pandas as pd
 import streamlit as st
 from pathlib import Path
 
+from auth import (
+    authenticate_user,
+    load_users,
+    add_user,
+    update_password,
+    delete_user,
+    DEFAULT_ADMIN_USER
+)
+
 # Ensure opam bin is in PATH
 opam_bin = os.path.expanduser("~/.opam/default/bin")
 if os.path.isdir(opam_bin) and opam_bin not in os.environ.get("PATH", "").split(os.pathsep):
@@ -35,6 +44,139 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Authentication session state initialization
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = None
+if "app_view" not in st.session_state:
+    st.session_state["app_view"] = "search"
+
+
+def login_page():
+    """Render a basic, clean login page in front of the application."""
+    st.markdown("<div style='text-align: center; margin-top: 50px;'>", unsafe_allow_html=True)
+    st.title("🔐 Login to Grew Corpus Search")
+    st.caption("Please enter your username and password to continue.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        with st.form("login_form", clear_on_submit=False):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Log In", use_container_width=True)
+
+            if submitted:
+                if authenticate_user(username, password):
+                    st.session_state["authenticated"] = True
+                    st.session_state["username"] = username.strip()
+                    st.success("Login successful! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+
+        st.info("Default administrator credentials: `admin` / `admin`")
+
+
+if not st.session_state["authenticated"]:
+    login_page()
+    st.stop()
+
+# --- SIDEBAR USER SESSION & NAVIGATION ---
+current_user = st.session_state["username"]
+st.sidebar.markdown(f"👤 Logged in as: **{current_user}**")
+st.sidebar.markdown("### 🧭 Navigation")
+
+search_btn_type = "primary" if st.session_state.get("app_view") == "search" else "secondary"
+if st.sidebar.button("🔍 Corpus Search", type=search_btn_type, use_container_width=True):
+    st.session_state["app_view"] = "search"
+    st.rerun()
+
+settings_btn_type = "primary" if st.session_state.get("app_view") == "settings" else "secondary"
+if st.sidebar.button("⚙️ User Management Settings", type=settings_btn_type, use_container_width=True):
+    st.session_state["app_view"] = "settings"
+    st.rerun()
+
+if st.sidebar.button("🚪 Log Out", use_container_width=True):
+    st.session_state["authenticated"] = False
+    st.session_state["username"] = None
+    st.session_state["app_view"] = "search"
+    st.rerun()
+
+st.sidebar.markdown("---")
+
+# Render User Management Settings view if selected
+if st.session_state.get("app_view") == "settings":
+    st.title("⚙️ User Management & Settings")
+    st.caption("Manage existing users, change passwords, and create new user accounts.")
+
+    tab_my_account, tab_all_users, tab_create_user = st.tabs([
+        "🔑 My Account",
+        "👥 All Users",
+        "➕ Create New User"
+    ])
+
+    with tab_my_account:
+        st.subheader("Change My Password")
+        with st.form("change_my_password_form"):
+            new_pass = st.text_input("New Password", type="password")
+            confirm_pass = st.text_input("Confirm New Password", type="password")
+            change_submitted = st.form_submit_button("Update Password")
+
+            if change_submitted:
+                if not new_pass:
+                    st.error("Password cannot be empty.")
+                elif new_pass != confirm_pass:
+                    st.error("Passwords do not match.")
+                else:
+                    success, msg = update_password(current_user, new_pass)
+                    if success:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
+    with tab_all_users:
+        st.subheader("Existing Accounts")
+        users = load_users()
+        user_list = [{"Username": u, "Role": info.get("role", "user")} for u, info in users.items()]
+        st.dataframe(pd.DataFrame(user_list), use_container_width=True, hide_index=True)
+
+        st.markdown("#### Delete User Account")
+        delete_candidates = [u for u in users.keys() if u != current_user]
+        if not delete_candidates:
+            st.info("No other user accounts available to delete.")
+        else:
+            with st.form("delete_user_form"):
+                user_to_delete = st.selectbox("Select user to delete:", delete_candidates)
+                delete_submitted = st.form_submit_button("Delete User")
+
+                if delete_submitted:
+                    success, msg = delete_user(user_to_delete, current_user=current_user)
+                    if success:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+    with tab_create_user:
+        st.subheader("Create a New User")
+        with st.form("create_user_form"):
+            new_username = st.text_input("New Username")
+            new_password = st.text_input("New Password", type="password")
+            role_choice = st.selectbox("Role", ["user", "admin"])
+            create_submitted = st.form_submit_button("Create User")
+
+            if create_submitted:
+                success, msg = add_user(new_username, new_password, role=role_choice)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+    st.stop()
 
 # Initialize Grew backend
 @st.cache_resource

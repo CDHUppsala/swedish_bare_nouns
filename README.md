@@ -9,6 +9,9 @@ The application allows linguists and NLP researchers to execute pattern queries 
 ## 📑 Table of Contents
 
 - [Architecture & Tech Stack](#-architecture--tech-stack)
+- [Authentication & User Management](#-authentication--user-management)
+  - [Technical Details & Security](#technical-details--security)
+  - [Using the User Management Interface](#using-the-user-management-interface)
 - [Prerequisites & System Requirements](#-prerequisites--system-requirements)
 - [Installation & Setup](#-installation--setup)
   - [1. System Packages](#1-system-packages)
@@ -70,6 +73,9 @@ The application is structured into a modular multi-tier architecture:
 
 - **Frontend / Presentation Layer:**
   - **Streamlit** (v1.40+): Web interface providing search configuration, live progress bars, summary KPI metric cards, dataframes, distribution charts (Altair / Streamlit charts), and JSON/CSV export buttons.
+  - **Authentication & User Management UI:** Login gate with session state isolation, account settings, password change, and multi-user administration.
+- **Authentication & Security Layer:**
+  - `auth.py`: Lightweight authentication engine implementing salted SHA-256 password hashing, user record persistence in `users.json`, credential verification, and account management safeguards.
 - **Engine & Processing Layer:**
   - `engine.py`: Core querying module providing unified whole-dataset querying, chunk-by-chunk iteration with memory cleanup, token attribute extraction, and sentence reconstruction.
   - `search_cli.py`: Production-ready CLI interface with tabular summaries, formatted text outputs, and structured JSON export.
@@ -80,6 +86,72 @@ The application is structured into a modular multi-tier architecture:
   - `conll`: OCaml parser library for CoNLL-U format.
 - **Corpus Format:**
   - Standard Universal Dependencies / CoNLL-U (`.conllu`) files, stored either flat in `data/` or organized in arbitrary nested subdirectories.
+
+---
+
+## 🔐 Authentication & User Management
+
+The application features a built-in, lightweight authentication and user management system that gates access to the corpus search engine and provides administrative control over user accounts.
+
+### Technical Details & Security
+
+- **Cryptographic Password Hashing:**
+  - Passwords are stored using salted **SHA-256** hashes.
+  - Each password generates a cryptographically secure 16-byte random hex salt (`secrets.token_hex(16)`).
+  - Stored format: `<salt>$<sha256(salt + password)>` (e.g., `69c7eabeb1ac5c6e4623cfb92be1a662$fb4f84...`).
+  - No plaintext passwords are ever persisted or logged.
+- **Zero-Dependency Storage (`users.json`):**
+  - User records are stored in `users.json` in the project root.
+  - Schema:
+    ```json
+    {
+      "admin": {
+        "password_hash": "69c7eabeb1ac5c6e4623cfb92be1a662$fb4f840fc107ba448e5f2c23e5751a9f77e175a0abb356b763390dcfeca97f01",
+        "role": "admin"
+      },
+      "analyst": {
+        "password_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90$8f3e2...",
+        "role": "user"
+      }
+    }
+    ```
+- **Auto-Initialization:**
+  - If `users.json` does not exist or contains invalid JSON, `auth.py` automatically initializes it with a default administrator account (`admin` / `admin`).
+- **Session State Gating:**
+  - `app.py` enforces session authentication via `st.session_state["authenticated"]` and `st.session_state["username"]`.
+  - Unauthenticated requests are immediately halted and presented with the login form before any corpus or Grew backend resources are initialized.
+- **Safety & Validation Safeguards:**
+  - **Duplicate Prevention:** Prevents creating users with existing usernames.
+  - **Self-Deletion Protection:** Users cannot delete their own active account while logged in.
+  - **Orphan / Lockout Prevention:** The last remaining user account cannot be deleted.
+  - **Input Sanitization:** Enforces non-empty usernames and passwords with whitespace stripping.
+
+### Using the User Management Interface
+
+#### 1. Logging In
+- Access the web interface at `http://localhost:8501`.
+- Enter your username and password into the login form.
+- **Default Credentials:**
+  - Username: `admin`
+  - Password: `admin`
+- *(Important: It is recommended to change the default `admin` password upon first deployment).*
+
+#### 2. Navigation
+- Once logged in, the sidebar displays your active username and navigation buttons:
+  - **🔍 Corpus Search:** Directs to the main dependency treebank search engine.
+  - **⚙️ User Management Settings:** Opens user account management.
+  - **🚪 Log Out:** Terminates the current user session and returns to the login screen.
+
+#### 3. User Management Settings
+Navigate to **⚙️ User Management Settings** in the sidebar to access three management tabs:
+
+1. **🔑 My Account:**
+   - Update your own password by entering and confirming a new password.
+2. **👥 All Users:**
+   - View a summary table of all registered accounts and their roles (`admin` or `user`).
+   - Delete existing user accounts using the dropdown selector (safeguards prevent deleting yourself or deleting the last remaining account).
+3. **➕ Create New User:**
+   - Register new user accounts with designated roles (`user` or `admin`).
 
 ---
 
@@ -355,10 +427,15 @@ python search_cli.py -f data/svt-2022_0001.conllu -q 'pattern { V [xpos="VB"]; S
 
 ### Running Tests
 
-Run the test suite to verify corpus discovery, single-file search, iterative querying, and whole-dataset queries:
+Run the test suite to verify authentication, corpus discovery, single-file search, iterative querying, and whole-dataset queries:
 
 ```bash
-python -m unittest test_engine.py
+# Run all unit tests
+python -m unittest discover -s . -p "test_*.py"
+
+# Or run individual test suites:
+python -m unittest test_auth.py    # Authentication & User Management tests
+python -m unittest test_engine.py  # Corpus search engine & Grew query tests
 ```
 
 ---
@@ -749,12 +826,15 @@ Grew uses graph pattern matching syntax enclosed in `pattern { ... }` blocks, wi
 
 ```text
 grew_frontend/
-├── app.py              # Streamlit Web Application (UI, visualization, exports)
+├── app.py              # Streamlit Web Application (UI, authentication gates, visualization)
+├── auth.py             # User authentication and user management module (SHA-256 + salt)
 ├── engine.py           # Core search engine & memory-safe iteration logic
 ├── search_cli.py       # Standalone Command-Line Interface (CLI)
 ├── extract.py          # XML to CoNLL-U streaming converter & extraction tool
 ├── organize_data.py    # Auto-organizer for loose corpus files into subfolders
-├── test_engine.py      # Automated unit and integration test suite
+├── test_auth.py        # Authentication & user management test suite
+├── test_engine.py      # Automated search engine test suite
+├── users.json          # Persistent user database (JSON format)
 ├── requirements.txt    # Python package dependencies
 ├── README.md           # Technical documentation and deployment guide
 ├── xml/                # Raw source XML corpora directory
