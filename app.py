@@ -263,7 +263,14 @@ st.sidebar.markdown(f"**Target Files Selected:** {len(target_files)}")
 # Settings
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ Display Settings")
-max_sample_matches = st.sidebar.slider("Max Sample Matches to Display:", min_value=5, max_value=200, value=25, step=5)
+max_sample_matches = st.sidebar.number_input(
+    "Max Matches to Display in UI:",
+    min_value=1,
+    max_value=100000,
+    value=50,
+    step=25,
+    help="Set the maximum number of match cards to render in the Match Inspector."
+)
 
 
 # --- 2. QUERY DEFINITION ---
@@ -315,7 +322,7 @@ if run_search:
                 file_path=file_path,
                 query_str=query_str,
                 extract_sentence_text=True,
-                max_matches=max_sample_matches
+                max_matches=None
             )
             elapsed = time.time() - start_time
             progress_bar.progress(1.0)
@@ -329,14 +336,13 @@ if run_search:
             m3.metric("Match Frequency", f"{(len(matches) / total_sentences * 1000):.1f} / 1k sents" if total_sentences else "0")
             m4.metric("Elapsed Time", f"{elapsed:.2f}s")
 
-            # Sample matches
-            sample_matches = matches
+            all_matches = matches
 
         else:
             # Multi-corpus iteration / Unified Dataset search
             total_targets = len(target_files)
             chunk_stats_list = []
-            collected_sample_matches = []
+            all_matches = []
             total_matches_count = 0
             total_sentences_count = 0
 
@@ -360,10 +366,8 @@ if run_search:
                     "Matches / 1k": ratio
                 })
 
-                # Collect sample matches across chunks
-                for m in chunk_data.get("matches", []):
-                    if len(collected_sample_matches) < max_sample_matches:
-                        collected_sample_matches.append(m)
+                # Collect all matches across chunks for export
+                all_matches.extend(chunk_data.get("matches", []))
 
                 # Update live progress
                 progress_bar.progress(idx / total_targets)
@@ -381,8 +385,6 @@ if run_search:
             m4.metric("Average Frequency", f"{(total_matches_count / total_sentences_count * 1000):.1f} / 1k" if total_sentences_count else "0")
             m5.metric("Elapsed Time", f"{elapsed:.2f}s")
 
-            sample_matches = collected_sample_matches
-
             # Per-Chunk Breakdown View
             if chunk_stats_list:
                 df_stats = pd.DataFrame(chunk_stats_list)
@@ -398,12 +400,14 @@ if run_search:
 
         # --- 4. MATCH DETAILS DISPLAY ---
         st.markdown("---")
-        st.subheader(f"🔎 Match Inspector (Displaying {min(len(sample_matches), max_sample_matches)} of {len(sample_matches) if search_mode == '🎯 Single Subcorpus Chunk' else total_matches_count} matches)")
+        display_limit = int(max_sample_matches)
+        display_count = min(len(all_matches), display_limit)
+        st.subheader(f"🔎 Match Inspector (Displaying {display_count} of {len(all_matches):,} matches)")
 
-        if not sample_matches:
+        if not all_matches:
             st.info("No matching occurrences found for the given pattern.")
         else:
-            for idx, item in enumerate(sample_matches[:max_sample_matches]):
+            for idx, item in enumerate(all_matches[:display_limit]):
                 chunk_lbl = f"[{item.get('chunk', '')}] " if item.get('chunk') else ""
                 sent_id = item.get("sent_id", "N/A")
                 expander_title = f"{chunk_lbl}Match #{idx + 1} — Sentence ID: {sent_id}"
@@ -434,13 +438,13 @@ if run_search:
         st.markdown("---")
         st.subheader("💾 Export Results")
 
-        if sample_matches:
-            st.markdown("##### 📄 Matches Export")
-            df_matches = matches_to_dataframe(sample_matches)
+        if all_matches:
+            st.markdown(f"##### 📄 Matches Export ({len(all_matches):,} matches)")
+            df_matches = matches_to_dataframe(all_matches)
             
             exp_col1, exp_col2, exp_col3 = st.columns(3)
             with exp_col1:
-                json_str = json.dumps(sample_matches, indent=2, ensure_ascii=False)
+                json_str = json.dumps(all_matches, indent=2, ensure_ascii=False)
                 st.download_button(
                     label="📥 Download Matches (JSON)",
                     data=json_str,

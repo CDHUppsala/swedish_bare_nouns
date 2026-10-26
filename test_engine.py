@@ -78,6 +78,22 @@ class TestEngine(unittest.TestCase):
         self.assertIn("chunk\tsent_id\tsentence_text", tsv_str)
         self.assertIn("V_form", tsv_str)
 
+    def test_single_corpus_search_all_matches(self):
+        query = 'pattern { V [xpos="VB"]; N [xpos="NN"]; V -[SS]-> N; }'
+        matches, total_sents = engine.search_single_corpus(
+            self.files[0], query, extract_sentence_text=True, max_matches=None
+        )
+        self.assertGreater(len(matches), 5)
+        self.assertGreater(total_sents, 0)
+
+    def test_unified_dataset_search_all_matches(self):
+        query = 'pattern { V [xpos="VB"]; N [xpos="NN"]; V -[SS]-> N; }'
+        subset = self.files[:2]
+        res = engine.search_unified_dataset(subset, query, max_display_matches=None)
+        self.assertEqual(res["total_files"], 2)
+        self.assertEqual(len(res["all_matches"]), res["total_matches"])
+        self.assertGreater(res["total_matches"], 0)
+
     def test_matches_to_dataframe_empty(self):
         df = engine.matches_to_dataframe([])
         self.assertTrue(df.empty)

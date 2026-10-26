@@ -242,12 +242,13 @@ def iterate_corpora_search(
 def search_unified_dataset(
     file_paths: List[str],
     query_str: str,
-    max_display_matches: int = 100,
+    max_display_matches: Optional[int] = 100,
     progress_callback: Optional[Callable[[int, int, str, int, int], None]] = None
 ) -> Dict[str, Any]:
     """
     Search across multiple files and return unified results as if it's one large dataset.
     Uses memory-safe chunked processing to avoid overflowing backend memory.
+    If max_display_matches is None, all matches are collected.
     """
     init_backend()
     all_matches = []
@@ -273,9 +274,9 @@ def search_unified_dataset(
             "match_ratio": round((cnt / sents * 1000) if sents > 0 else 0, 2)
         })
         
-        # Keep detailed matches up to max_display_matches (or collect all if small)
+        # Keep detailed matches up to max_display_matches (or collect all if max_display_matches is None)
         for m in chunk_res["matches"]:
-            if len(all_matches) < max_display_matches:
+            if max_display_matches is None or len(all_matches) < max_display_matches:
                 all_matches.append(m)
 
     return {
@@ -283,6 +284,7 @@ def search_unified_dataset(
         "total_sentences": total_sentences,
         "total_matches": total_matches,
         "sample_matches": all_matches,
+        "all_matches": all_matches,
         "chunk_stats": chunk_stats
     }
 

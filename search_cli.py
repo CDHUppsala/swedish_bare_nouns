@@ -104,11 +104,12 @@ def main():
 
     if len(files) == 1 and not args.all:
         # Single file search
+        need_all = bool(args.output or args.format in ("csv", "tsv", "json"))
         matches, total_sents = search_single_corpus(
             files[0],
             args.query,
             extract_sentence_text=not args.count_only,
-            max_matches=None if args.output else args.max_matches
+            max_matches=None if need_all else args.max_matches
         )
         elapsed = time.time() - start_time
         results_data = {
@@ -116,7 +117,8 @@ def main():
             "total_sentences": total_sents,
             "total_matches": len(matches),
             "elapsed_seconds": round(elapsed, 3),
-            "matches": matches[:args.max_matches]
+            "matches": matches,
+            "sample_matches": matches[:args.max_matches]
         }
     else:
         # Iterative / Multi-corpus search
@@ -124,10 +126,11 @@ def main():
             sys.stderr.write(f"\r[{curr}/{total}] {name}: +{m_cnt} matches (Total: {total_m})")
             sys.stderr.flush()
 
+        need_all = bool(args.output or args.format in ("csv", "tsv", "json"))
         results_data = search_unified_dataset(
             file_paths=files,
             query_str=args.query,
-            max_display_matches=args.max_matches,
+            max_display_matches=None if need_all else args.max_matches,
             progress_callback=progress
         )
         elapsed = time.time() - start_time
@@ -135,15 +138,16 @@ def main():
         sys.stderr.write("\n")
 
     # Output formatting
-    sample_list = results_data.get("sample_matches", results_data.get("matches", []))
+    all_export_list = results_data.get("all_matches", results_data.get("matches", results_data.get("sample_matches", [])))
+    sample_list = results_data.get("sample_matches", all_export_list[:args.max_matches])
 
     if args.format == "json":
         print(json.dumps(results_data, indent=2, ensure_ascii=False))
     elif args.format == "csv":
-        df = matches_to_dataframe(sample_list)
+        df = matches_to_dataframe(all_export_list)
         print(df.to_csv(index=False))
     elif args.format == "tsv":
-        df = matches_to_dataframe(sample_list)
+        df = matches_to_dataframe(all_export_list)
         print(df.to_csv(index=False, sep="\t"))
     elif args.format == "summary":
         print("=" * 60)
@@ -178,10 +182,10 @@ def main():
     if args.output:
         out_path = Path(args.output)
         if out_path.suffix.lower() == ".csv":
-            df = matches_to_dataframe(sample_list)
+            df = matches_to_dataframe(all_export_list)
             df.to_csv(out_path, index=False)
         elif out_path.suffix.lower() == ".tsv":
-            df = matches_to_dataframe(sample_list)
+            df = matches_to_dataframe(all_export_list)
             df.to_csv(out_path, index=False, sep="\t")
         else:
             with open(out_path, "w", encoding="utf-8") as f:
