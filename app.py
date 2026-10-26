@@ -53,6 +53,10 @@ if "username" not in st.session_state:
     st.session_state["username"] = None
 if "app_view" not in st.session_state:
     st.session_state["app_view"] = "search"
+if "search_results" not in st.session_state:
+    st.session_state["search_results"] = None
+if "current_match_page" not in st.session_state:
+    st.session_state["current_match_page"] = 1
 
 
 def login_page():
@@ -262,14 +266,14 @@ st.sidebar.markdown(f"**Target Files Selected:** {len(target_files)}")
 
 # Settings
 st.sidebar.markdown("---")
-st.sidebar.subheader("⚙️ Display Settings")
-max_sample_matches = st.sidebar.number_input(
-    "Max Matches to Display in UI:",
-    min_value=1,
-    max_value=100000,
-    value=50,
-    step=25,
-    help="Set the maximum number of match cards to render in the Match Inspector."
+st.sidebar.subheader("⚙️ Match Browser Settings")
+matches_per_page = st.sidebar.number_input(
+    "Matches Per Page in Inspector:",
+    min_value=5,
+    max_value=500,
+    value=25,
+    step=5,
+    help="Number of match cards to display per page in the Match Inspector."
 )
 
 
@@ -287,7 +291,7 @@ preset_queries = {
     "UD: Adjective modifying Noun": 'pattern {\n  N [upos=NOUN];\n  A [upos=ADJ];\n  N -[amod]-> A;\n}'
 }
 
-col_preset, col_clear = st.columns([3, 1])
+col_preset, col_clear_preset = st.columns([3, 1])
 with col_preset:
     selected_preset = st.selectbox("Preset Query Templates:", list(preset_queries.keys()), index=1)
 
@@ -295,10 +299,17 @@ default_text = preset_queries[selected_preset] if selected_preset != "Custom Req
 query_str = st.text_area("Grew Query Syntax (Grew / GRS pattern):", value=default_text, height=140)
 
 # Search Trigger
-run_search = st.button("🚀 Run Search", type="primary", use_container_width=True)
+col_run, col_clear_results = st.columns([4, 1])
+with col_run:
+    run_search = st.button("🚀 Run Search", type="primary", use_container_width=True)
+with col_clear_results:
+    if st.button("🗑️ Clear Results", use_container_width=True):
+        st.session_state["search_results"] = None
+        st.session_state["current_match_page"] = 1
+        st.rerun()
 
 
-# --- 3. SEARCH EXECUTION & RESULTS ---
+# --- 3. SEARCH EXECUTION ---
 if run_search:
     if not query_str.strip():
         st.warning("Please enter a valid Grew query pattern before running.")
@@ -328,15 +339,16 @@ if run_search:
             progress_bar.progress(1.0)
             status_text.text("Search completed.")
 
-            # Metrics
-            st.markdown("### 📊 Search Results Summary")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Total Matches", len(matches))
-            m2.metric("Sentences Scanned", total_sentences)
-            m3.metric("Match Frequency", f"{(len(matches) / total_sentences * 1000):.1f} / 1k sents" if total_sentences else "0")
-            m4.metric("Elapsed Time", f"{elapsed:.2f}s")
-
-            all_matches = matches
+            st.session_state["search_results"] = {
+                "search_mode": search_mode,
+                "all_matches": matches,
+                "total_matches_count": len(matches),
+                "total_sentences_count": total_sentences,
+                "total_targets": 1,
+                "elapsed": elapsed,
+                "chunk_stats_list": []
+            }
+            st.session_state["current_match_page"] = 1
 
         else:
             # Multi-corpus iteration / Unified Dataset search
@@ -366,7 +378,7 @@ if run_search:
                     "Matches / 1k": ratio
                 })
 
-                # Collect all matches across chunks for export
+                # Collect all matches across chunks for export and browsing
                 all_matches.extend(chunk_data.get("matches", []))
 
                 # Update live progress
@@ -376,46 +388,124 @@ if run_search:
             elapsed = time.time() - start_time
             status_text.text(f"Completed search across {total_targets} subcorpus files in {elapsed:.2f}s.")
 
-            # Metrics
-            st.markdown("### 📊 Search Results Summary")
-            m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("Total Matches", f"{total_matches_count:,}")
-            m2.metric("Total Sentences", f"{total_sentences_count:,}")
-            m3.metric("Subcorpora Scanned", total_targets)
-            m4.metric("Average Frequency", f"{(total_matches_count / total_sentences_count * 1000):.1f} / 1k" if total_sentences_count else "0")
-            m5.metric("Elapsed Time", f"{elapsed:.2f}s")
+            st.session_state["search_results"] = {
+                "search_mode": search_mode,
+                "all_matches": all_matches,
+                "total_matches_count": total_matches_count,
+                "total_sentences_count": total_sentences_count,
+                "total_targets": total_targets,
+                "elapsed": elapsed,
+                "chunk_stats_list": chunk_stats_list
+            }
+            st.session_state["current_match_page"] = 1
 
-            # Per-Chunk Breakdown View
-            if chunk_stats_list:
-                df_stats = pd.DataFrame(chunk_stats_list)
-                
-                st.markdown("### 📈 Subcorpus Distribution Breakdown")
-                tab_table, tab_chart = st.tabs(["📋 Table View", "📊 Chart View"])
-                
-                with tab_table:
-                    st.dataframe(df_stats, use_container_width=True, hide_index=True)
-                
-                with tab_chart:
-                    st.bar_chart(df_stats.set_index("Subcorpus Chunk")["Matches"])
+    except Exception as e:
+        st.error(f"Error during search execution: {e}")
 
-        # --- 4. MATCH DETAILS DISPLAY ---
-        st.markdown("---")
-        display_limit = int(max_sample_matches)
-        display_count = min(len(all_matches), display_limit)
-        st.subheader(f"🔎 Match Inspector (Displaying {display_count} of {len(all_matches):,} matches)")
 
-        if not all_matches:
-            st.info("No matching occurrences found for the given pattern.")
-        else:
-            for idx, item in enumerate(all_matches[:display_limit]):
+# --- 4. RENDER RESULTS & MATCH BROWSER ---
+search_results = st.session_state.get("search_results")
+if search_results is not None:
+    all_matches = search_results["all_matches"]
+    total_matches_count = search_results["total_matches_count"]
+    total_sentences_count = search_results["total_sentences_count"]
+    total_targets = search_results["total_targets"]
+    elapsed = search_results["elapsed"]
+    chunk_stats_list = search_results["chunk_stats_list"]
+    current_search_mode = search_results["search_mode"]
+
+    st.markdown("### 📊 Search Results Summary")
+    if current_search_mode == "🎯 Single Subcorpus Chunk":
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Matches", len(all_matches))
+        m2.metric("Sentences Scanned", total_sentences_count)
+        m3.metric("Match Frequency", f"{(len(all_matches) / total_sentences_count * 1000):.1f} / 1k sents" if total_sentences_count else "0")
+        m4.metric("Elapsed Time", f"{elapsed:.2f}s")
+    else:
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Total Matches", f"{total_matches_count:,}")
+        m2.metric("Total Sentences", f"{total_sentences_count:,}")
+        m3.metric("Subcorpora Scanned", total_targets)
+        m4.metric("Average Frequency", f"{(total_matches_count / total_sentences_count * 1000):.1f} / 1k" if total_sentences_count else "0")
+        m5.metric("Elapsed Time", f"{elapsed:.2f}s")
+
+    # Per-Chunk Breakdown View
+    if chunk_stats_list:
+        df_stats = pd.DataFrame(chunk_stats_list)
+        st.markdown("### 📈 Subcorpus Distribution Breakdown")
+        tab_stat_table, tab_stat_chart = st.tabs(["📋 Table View", "📊 Chart View"])
+        
+        with tab_stat_table:
+            st.dataframe(df_stats, use_container_width=True, hide_index=True)
+        
+        with tab_stat_chart:
+            st.bar_chart(df_stats.set_index("Subcorpus Chunk")["Matches"])
+    else:
+        df_stats = None
+
+    # --- MATCH BROWSER (Inspector Cards + Full Table) ---
+    st.markdown("---")
+    st.subheader(f"🔎 Match Browser ({len(all_matches):,} Total Matches)")
+
+    if not all_matches:
+        st.info("No matching occurrences found for the given pattern.")
+    else:
+        tab_cards, tab_table = st.tabs(["🔎 Paginated Match Inspector", "📋 All Matches Table"])
+
+        with tab_cards:
+            total_matches = len(all_matches)
+            page_size = max(1, int(matches_per_page))
+            total_pages = max(1, (total_matches + page_size - 1) // page_size)
+
+            # Ensure current page in bounds
+            cur_page = max(1, min(int(st.session_state.get("current_match_page", 1)), total_pages))
+            st.session_state["current_match_page"] = cur_page
+
+            # Pagination Controls
+            nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 2, 1, 1])
+            with nav_col1:
+                if st.button("⏮ First", disabled=(cur_page <= 1), use_container_width=True, key="btn_first"):
+                    st.session_state["current_match_page"] = 1
+                    st.rerun()
+            with nav_col2:
+                if st.button("◀ Prev", disabled=(cur_page <= 1), use_container_width=True, key="btn_prev"):
+                    st.session_state["current_match_page"] = max(1, cur_page - 1)
+                    st.rerun()
+            with nav_col3:
+                chosen_page = st.number_input(
+                    f"Page (of {total_pages:,})",
+                    min_value=1,
+                    max_value=total_pages,
+                    value=cur_page,
+                    step=1,
+                    key="match_page_selector"
+                )
+                if chosen_page != cur_page:
+                    st.session_state["current_match_page"] = chosen_page
+                    st.rerun()
+            with nav_col4:
+                if st.button("Next ▶", disabled=(cur_page >= total_pages), use_container_width=True, key="btn_next"):
+                    st.session_state["current_match_page"] = min(total_pages, cur_page + 1)
+                    st.rerun()
+            with nav_col5:
+                if st.button("Last ⏭", disabled=(cur_page >= total_pages), use_container_width=True, key="btn_last"):
+                    st.session_state["current_match_page"] = total_pages
+                    st.rerun()
+
+            start_idx = (cur_page - 1) * page_size
+            end_idx = min(start_idx + page_size, total_matches)
+            st.caption(f"Showing matches **{start_idx + 1:,}** to **{end_idx:,}** of **{total_matches:,}** (Page **{cur_page:,}** of **{total_pages:,}**)")
+
+            for idx, item in enumerate(all_matches[start_idx:end_idx]):
+                match_num = start_idx + idx + 1
                 chunk_lbl = f"[{item.get('chunk', '')}] " if item.get('chunk') else ""
                 sent_id = item.get("sent_id", "N/A")
-                expander_title = f"{chunk_lbl}Match #{idx + 1} — Sentence ID: {sent_id}"
+                expander_title = f"{chunk_lbl}Match #{match_num:,} — Sentence ID: {sent_id}"
 
                 with st.expander(expander_title, expanded=(idx < 3)):
                     # Sentence text
                     if item.get("sentence_text"):
-                        st.markdown(f"**Sentence Text:**")
+                        st.markdown("**Sentence Text:**")
                         st.info(item["sentence_text"])
 
                     # Matched tokens breakdown
@@ -434,73 +524,74 @@ if run_search:
                     with st.expander("Show Raw Match JSON", expanded=False):
                         st.json(item)
 
-        # --- 5. EXPORT OPTIONS ---
-        st.markdown("---")
-        st.subheader("💾 Export Results")
-
-        if all_matches:
-            st.markdown(f"##### 📄 Matches Export ({len(all_matches):,} matches)")
+        with tab_table:
             df_matches = matches_to_dataframe(all_matches)
-            
-            exp_col1, exp_col2, exp_col3 = st.columns(3)
-            with exp_col1:
-                json_str = json.dumps(all_matches, indent=2, ensure_ascii=False)
-                st.download_button(
-                    label="📥 Download Matches (JSON)",
-                    data=json_str,
-                    file_name="grew_search_matches.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            with exp_col2:
-                csv_matches = df_matches.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Matches (CSV)",
-                    data=csv_matches,
-                    file_name="grew_search_matches.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            with exp_col3:
-                tsv_matches = df_matches.to_csv(index=False, sep="\t")
-                st.download_button(
-                    label="📥 Download Matches (TSV)",
-                    data=tsv_matches,
-                    file_name="grew_search_matches.tsv",
-                    mime="text/tab-separated-values",
-                    use_container_width=True
-                )
+            st.dataframe(df_matches, use_container_width=True, hide_index=True)
 
-        if 'df_stats' in locals() and df_stats is not None and not df_stats.empty:
-            st.markdown("##### 📊 Subcorpus Statistics Export")
-            stat_col1, stat_col2, stat_col3 = st.columns(3)
-            with stat_col1:
-                json_stats = df_stats.to_json(orient="records", indent=2)
-                st.download_button(
-                    label="📥 Download Stats (JSON)",
-                    data=json_stats,
-                    file_name="subcorpus_match_stats.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            with stat_col2:
-                csv_data = df_stats.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Stats (CSV)",
-                    data=csv_data,
-                    file_name="subcorpus_match_stats.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            with stat_col3:
-                tsv_data = df_stats.to_csv(index=False, sep="\t")
-                st.download_button(
-                    label="📥 Download Stats (TSV)",
-                    data=tsv_data,
-                    file_name="subcorpus_match_stats.tsv",
-                    mime="text/tab-separated-values",
-                    use_container_width=True
-                )
+    # --- 5. EXPORT OPTIONS ---
+    st.markdown("---")
+    st.subheader("💾 Export Results")
 
-    except Exception as e:
-        st.error(f"Error during search execution: {e}")
+    if all_matches:
+        st.markdown(f"##### 📄 Matches Export ({len(all_matches):,} matches)")
+        df_matches = matches_to_dataframe(all_matches)
+        
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        with exp_col1:
+            json_str = json.dumps(all_matches, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="📥 Download Matches (JSON)",
+                data=json_str,
+                file_name="grew_search_matches.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        with exp_col2:
+            csv_matches = df_matches.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Matches (CSV)",
+                data=csv_matches,
+                file_name="grew_search_matches.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with exp_col3:
+            tsv_matches = df_matches.to_csv(index=False, sep="\t")
+            st.download_button(
+                label="📥 Download Matches (TSV)",
+                data=tsv_matches,
+                file_name="grew_search_matches.tsv",
+                mime="text/tab-separated-values",
+                use_container_width=True
+            )
+
+    if df_stats is not None and not df_stats.empty:
+        st.markdown("##### 📊 Subcorpus Statistics Export")
+        stat_col1, stat_col2, stat_col3 = st.columns(3)
+        with stat_col1:
+            json_stats = df_stats.to_json(orient="records", indent=2)
+            st.download_button(
+                label="📥 Download Stats (JSON)",
+                data=json_stats,
+                file_name="subcorpus_match_stats.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        with stat_col2:
+            csv_data = df_stats.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Stats (CSV)",
+                data=csv_data,
+                file_name="subcorpus_match_stats.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with stat_col3:
+            tsv_data = df_stats.to_csv(index=False, sep="\t")
+            st.download_button(
+                label="📥 Download Stats (TSV)",
+                data=tsv_data,
+                file_name="subcorpus_match_stats.tsv",
+                mime="text/tab-separated-values",
+                use_container_width=True
+            )

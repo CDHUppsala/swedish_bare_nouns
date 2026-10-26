@@ -692,7 +692,8 @@ Certbot will automatically update the Nginx configuration to enforce HTTPS and s
 4. **Inspect Results:**
    - View top summary KPI metrics (Total Matches, Sentences Scanned, Frequency).
    - In Iterative mode, switch between the **📋 Table View** and **📊 Chart View** to analyze frequencies across chunks.
-   - Expand individual matches in the **🔎 Match Inspector** to read sentence texts, matched node lemmas, POS tags, and morphological features.
+   - Browse all results in the **🔎 Match Browser** via paginated match inspection cards (with customizable page sizes and navigation controls) or explore the entire match set in the **📋 All Matches Table**.
+   - Expand individual matches in the Match Inspector to read sentence texts, matched node lemmas, POS tags, and morphological features.
    - Click **📥 Download Results** for JSON, CSV, or TSV exports.
 
 ---
