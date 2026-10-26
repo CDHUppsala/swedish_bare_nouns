@@ -72,13 +72,13 @@ The application is structured into a modular multi-tier architecture:
 ### Components
 
 - **Frontend / Presentation Layer:**
-  - **Streamlit** (v1.40+): Web interface providing search configuration, live progress bars, summary KPI metric cards, dataframes, distribution charts (Altair / Streamlit charts), and JSON/CSV export buttons.
+  - **Streamlit** (v1.40+): Web interface providing search configuration, live progress bars, summary KPI metric cards, dataframes, distribution charts (Altair / Streamlit charts), and JSON/CSV/TSV export buttons.
   - **Authentication & User Management UI:** Login gate with session state isolation, account settings, password change, and multi-user administration.
 - **Authentication & Security Layer:**
   - `auth.py`: Lightweight authentication engine implementing salted SHA-256 password hashing, user record persistence in `users.json`, credential verification, and account management safeguards.
 - **Engine & Processing Layer:**
   - `engine.py`: Core querying module providing unified whole-dataset querying, chunk-by-chunk iteration with memory cleanup, token attribute extraction, and sentence reconstruction.
-  - `search_cli.py`: Production-ready CLI interface with tabular summaries, formatted text outputs, and structured JSON export.
+  - `search_cli.py`: Production-ready CLI interface with tabular summaries, formatted text outputs, and structured JSON/CSV/TSV export.
   - `extract.py`: High-throughput, streaming XML-to-CoNLL-U parser and corpus conversion utility.
 - **Linguistic Graph Matching Engine:**
   - `grewpy`: Official Python client for Grew.
@@ -418,6 +418,14 @@ python search_cli.py -f data/svt-2022_0001.conllu -q 'pattern { V [xpos="VB"]; S
   ```bash
   python search_cli.py -n 5 --format json -o results.json
   ```
+- **Tabular CSV (`--format csv`):**
+  ```bash
+  python search_cli.py -n 5 --format csv -o results.csv
+  ```
+- **Tabular TSV (`--format tsv`):**
+  ```bash
+  python search_cli.py -n 5 --format tsv -o results.tsv
+  ```
 - **Count only (fast frequency scan):**
   ```bash
   python search_cli.py --all --count-only
@@ -685,7 +693,7 @@ Certbot will automatically update the Nginx configuration to enforce HTTPS and s
    - View top summary KPI metrics (Total Matches, Sentences Scanned, Frequency).
    - In Iterative mode, switch between the **📋 Table View** and **📊 Chart View** to analyze frequencies across chunks.
    - Expand individual matches in the **🔎 Match Inspector** to read sentence texts, matched node lemmas, POS tags, and morphological features.
-   - Click **📥 Download Results** for JSON or CSV exports.
+   - Click **📥 Download Results** for JSON, CSV, or TSV exports.
 
 ---
 
@@ -696,7 +704,7 @@ Certbot will automatically update the Nginx configuration to enforce HTTPS and s
 ```text
 usage: search_cli.py [-h] [-q QUERY] [-f FILE] [-d DATA_DIR] [-s SUBFOLDER]
                      [-n CHUNKS_LIMIT] [--all] [--count-only] [-m MAX_MATCHES]
-                     [--format {text,json,summary}] [-o OUTPUT]
+                     [--format {text,json,summary,csv,tsv}] [-o OUTPUT]
 
 Options:
   -q, --query TEXT         Grew pattern query.
@@ -707,8 +715,8 @@ Options:
   --all                    Search across all subcorpora.
   --count-only             Output match counts only without building full trees.
   -m, --max-matches N      Maximum sample matches to display (default: 20).
-  --format FORMAT          Output format: text, json, summary.
-  -o, --output FILE        Save full result payload to a JSON file.
+  --format FORMAT          Output format: text, json, summary, csv, tsv.
+  -o, --output FILE        Save full result payload to a file (.json, .csv, .tsv).
 ```
 
 #### Examples

@@ -34,7 +34,8 @@ from engine import (
     get_corpus_chunk_map,
     search_single_corpus,
     iterate_corpora_search,
-    search_unified_dataset
+    search_unified_dataset,
+    matches_to_dataframe
 )
 
 # Page configuration
@@ -432,26 +433,68 @@ if run_search:
         # --- 5. EXPORT OPTIONS ---
         st.markdown("---")
         st.subheader("💾 Export Results")
-        exp_col1, exp_col2 = st.columns(2)
-        
-        with exp_col1:
-            json_str = json.dumps(sample_matches, indent=2, ensure_ascii=False)
-            st.download_button(
-                label="📥 Download Sample Matches (JSON)",
-                data=json_str,
-                file_name="grew_search_matches.json",
-                mime="application/json",
-                use_container_width=True
-            )
 
-        with exp_col2:
-            if 'df_stats' in locals():
+        if sample_matches:
+            st.markdown("##### 📄 Matches Export")
+            df_matches = matches_to_dataframe(sample_matches)
+            
+            exp_col1, exp_col2, exp_col3 = st.columns(3)
+            with exp_col1:
+                json_str = json.dumps(sample_matches, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label="📥 Download Matches (JSON)",
+                    data=json_str,
+                    file_name="grew_search_matches.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            with exp_col2:
+                csv_matches = df_matches.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Matches (CSV)",
+                    data=csv_matches,
+                    file_name="grew_search_matches.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            with exp_col3:
+                tsv_matches = df_matches.to_csv(index=False, sep="\t")
+                st.download_button(
+                    label="📥 Download Matches (TSV)",
+                    data=tsv_matches,
+                    file_name="grew_search_matches.tsv",
+                    mime="text/tab-separated-values",
+                    use_container_width=True
+                )
+
+        if 'df_stats' in locals() and df_stats is not None and not df_stats.empty:
+            st.markdown("##### 📊 Subcorpus Statistics Export")
+            stat_col1, stat_col2, stat_col3 = st.columns(3)
+            with stat_col1:
+                json_stats = df_stats.to_json(orient="records", indent=2)
+                st.download_button(
+                    label="📥 Download Stats (JSON)",
+                    data=json_stats,
+                    file_name="subcorpus_match_stats.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            with stat_col2:
                 csv_data = df_stats.to_csv(index=False)
                 st.download_button(
-                    label="📥 Download Subcorpus Stats (CSV)",
+                    label="📥 Download Stats (CSV)",
                     data=csv_data,
                     file_name="subcorpus_match_stats.csv",
                     mime="text/csv",
+                    use_container_width=True
+                )
+            with stat_col3:
+                tsv_data = df_stats.to_csv(index=False, sep="\t")
+                st.download_button(
+                    label="📥 Download Stats (TSV)",
+                    data=tsv_data,
+                    file_name="subcorpus_match_stats.tsv",
+                    mime="text/tab-separated-values",
                     use_container_width=True
                 )
 

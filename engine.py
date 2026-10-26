@@ -7,6 +7,7 @@ memory management, and match formatting.
 import os
 import sys
 import glob
+import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Generator, Optional, Tuple, Callable
 
@@ -284,3 +285,47 @@ def search_unified_dataset(
         "sample_matches": all_matches,
         "chunk_stats": chunk_stats
     }
+
+
+def matches_to_dataframe(matches: List[Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Convert a list of match dictionaries into a flattened pandas DataFrame
+    suitable for CSV and TSV export.
+    """
+    if not matches:
+        return pd.DataFrame()
+
+    # Collect all unique matched node variable names preserving discovery order
+    var_names = []
+    for m in matches:
+        for var in m.get("matched_tokens", {}).keys():
+            if var not in var_names:
+                var_names.append(var)
+        if not var_names and "matching" in m and "nodes" in m["matching"]:
+            for var in m["matching"]["nodes"].keys():
+                if var not in var_names:
+                    var_names.append(var)
+
+    rows = []
+    for m in matches:
+        row = {
+            "chunk": m.get("chunk", ""),
+            "sent_id": m.get("sent_id", ""),
+            "sentence_text": m.get("sentence_text", "")
+        }
+        matched_tokens = m.get("matched_tokens", {})
+        matching_nodes = m.get("matching", {}).get("nodes", {})
+
+        for var in var_names:
+            tok = matched_tokens.get(var, {})
+            node_id = tok.get("node_id") or matching_nodes.get(var, "")
+            row[f"{var}_form"] = tok.get("form", "")
+            row[f"{var}_lemma"] = tok.get("lemma", "")
+            row[f"{var}_pos"] = tok.get("xpos", "") or tok.get("upos", "")
+            row[f"{var}_upos"] = tok.get("upos", "")
+            row[f"{var}_xpos"] = tok.get("xpos", "")
+            row[f"{var}_node_id"] = str(node_id) if node_id else ""
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)

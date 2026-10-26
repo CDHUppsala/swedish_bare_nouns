@@ -13,7 +13,8 @@ from engine import (
     discover_corpus_files,
     search_single_corpus,
     iterate_corpora_search,
-    search_unified_dataset
+    search_unified_dataset,
+    matches_to_dataframe
 )
 
 DEFAULT_PRESET_QUERY = 'pattern { V [xpos="VB"]; N [xpos="NN"]; V -[SS]-> N; }'
@@ -71,15 +72,15 @@ def main():
     )
     parser.add_argument(
         "--format",
-        choices=["text", "json", "summary"],
+        choices=["text", "json", "summary", "csv", "tsv"],
         default="text",
-        help="Output format: text, json, or summary table (default: text)."
+        help="Output format: text, json, summary, csv, or tsv (default: text)."
     )
     parser.add_argument(
         "-o", "--output",
         type=str,
         default=None,
-        help="Optional file path to save JSON results."
+        help="Optional file path to save results (.json, .csv, or .tsv)."
     )
 
     args = parser.parse_args()
@@ -134,8 +135,16 @@ def main():
         sys.stderr.write("\n")
 
     # Output formatting
+    sample_list = results_data.get("sample_matches", results_data.get("matches", []))
+
     if args.format == "json":
         print(json.dumps(results_data, indent=2, ensure_ascii=False))
+    elif args.format == "csv":
+        df = matches_to_dataframe(sample_list)
+        print(df.to_csv(index=False))
+    elif args.format == "tsv":
+        df = matches_to_dataframe(sample_list)
+        print(df.to_csv(index=False, sep="\t"))
     elif args.format == "summary":
         print("=" * 60)
         print("SEARCH SUMMARY")
@@ -155,7 +164,6 @@ def main():
     else:
         # Text output
         print(f"\nSearch complete: Found {results_data['total_matches']} matches in {results_data['total_sentences']} sentences across {results_data['total_files']} files ({results_data['elapsed_seconds']}s).")
-        sample_list = results_data.get("sample_matches", results_data.get("matches", []))
         if sample_list and not args.count_only:
             print("\nSample Results:")
             for idx, item in enumerate(sample_list[:args.max_matches]):
@@ -168,8 +176,16 @@ def main():
                 print(f"Node Mapping: {item.get('matching', {}).get('nodes', {})}")
 
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(results_data, f, indent=2, ensure_ascii=False)
+        out_path = Path(args.output)
+        if out_path.suffix.lower() == ".csv":
+            df = matches_to_dataframe(sample_list)
+            df.to_csv(out_path, index=False)
+        elif out_path.suffix.lower() == ".tsv":
+            df = matches_to_dataframe(sample_list)
+            df.to_csv(out_path, index=False, sep="\t")
+        else:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(results_data, f, indent=2, ensure_ascii=False)
         print(f"\nResults saved to {args.output}", file=sys.stderr)
 
 
